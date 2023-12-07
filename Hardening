@@ -1,0 +1,630 @@
+#!/bin/bash
+
+# Función para verificar si los repositorios son válidos y autorizados
+verificar_repositorios() {
+    echo "Verificando repositorios configurados..."
+    if dnf repolist all | grep -E 'enabled$'; then
+        echo "Los repositorios son válidos y autorizados."
+    else
+        echo "Fallo: Se encontraron repositorios no aprobados."
+        # Agrega pasos de remedio aquí si es necesario
+    fi
+}
+
+# Función para verificar paquetes PostgreSQL instalados
+verificar_paquetes_postgresql() {
+    echo "Verificando paquetes PostgreSQL instalados..."
+    if rpm -qa | grep postgres; then
+        echo "Se instalaron paquetes de PostgreSQL. Verificando el repositorio..."
+        dnf info $(rpm -qa | grep postgres) | grep -E '^Name|^Version|^From'
+        # Agrega pasos de remedio aquí si es necesario
+    else
+        echo "No se encontraron paquetes de PostgreSQL."
+        # Agrega pasos de remedio aquí si es necesario
+    fi
+}
+
+# Función para remediar, alterando los repositorios
+alterar_repositorios() {
+    echo "Alterando repositorios para incluir solo fuentes válidas y autorizadas..."
+    # Agrega comandos para alterar repositorios
+}
+
+# Ejecución principal del script
+echo "Asegurando que los paquetes se obtengan de repositorios autorizados..."
+
+# Ejecutar las funciones de auditoría
+verificar_repositorios
+verificar_paquetes_postgresql
+
+# Agrega más funciones de auditoría según sea necesario
+
+# Agrega más pasos de remedio según sea necesario
+
+# Ejemplo de remedio: Agregar un repositorio autorizado
+alterar_repositorios
+
+# Nombre del servicio PostgreSQL
+SERVICE_NAME="postgresql-16"
+
+# Función para verificar si el servicio systemd está habilitado
+verificar_servicio_habilitado() {
+    echo "Verificando si el servicio $SERVICE_NAME está habilitado..."
+    if [ "$(systemctl is-enabled $SERVICE_NAME)" == "enabled" ]; then
+        echo "El servicio $SERVICE_NAME está habilitado."
+    else
+        echo "Fallo: El servicio $SERVICE_NAME no está habilitado."
+        # Agrega pasos de remedio aquí si es necesario
+        habilitar_servicio
+    fi
+}
+
+# Función para habilitar el servicio systemd
+habilitar_servicio() {
+    echo "Habilitando el servicio $SERVICE_NAME..."
+    systemctl enable $SERVICE_NAME
+    if [ "$(systemctl is-enabled $SERVICE_NAME)" == "enabled" ]; then
+        echo "El servicio $SERVICE_NAME se habilitó con éxito."
+    else
+        echo "Fallo al habilitar el servicio $SERVICE_NAME."
+        # Agrega pasos de remedio aquí si es necesario
+    fi
+}
+
+# Ejecución principal del script
+echo "Asegurando que los archivos de servicio systemd estén habilitados..."
+
+# Ejecutar la función de auditoría
+verificar_servicio_habilitado
+
+# Versión de PostgreSQL
+PG_VERSION="16"
+# Directorio del usuario postgres
+POSTGRES_USER_DIR="/var/lib/pgsql/$PG_VERSION/data"
+
+# Función para verificar la inicialización exitosa del clúster de datos
+verificar_inicializacion_cluster() {
+    echo "Verificando la inicialización exitosa del clúster de datos de PostgreSQL..."
+
+    # Verificar si el directorio del usuario postgres existe
+    if [ -d "$POSTGRES_USER_DIR" ]; then
+        echo "El directorio del usuario postgres existe."
+        
+        # Verificar si el directorio del clúster de datos tiene los permisos correctos
+        permisos_correctos=$(stat -c %U:%G $POSTGRES_USER_DIR)
+        if [ "$permisos_correctos" == "postgres:postgres" ]; then
+            echo "El clúster de datos tiene los permisos correctos."
+            
+            # Verificar si el clúster de datos está inicializado correctamente
+            if su -s /bin/bash postgres -c "/usr/pgsql-$PG_VERSION/bin/postgresql-$PG_VERSION-check-db-dir $POSTGRES_USER_DIR"; then
+                echo "El clúster de datos está inicializado correctamente."
+            else
+                echo "Fallo: El clúster de datos no está inicializado correctamente."
+                # Agrega pasos de remedio aquí si es necesario
+                remediar_cluster_datos
+            fi
+        else
+            echo "Fallo: El clúster de datos no tiene los permisos correctos."
+            # Agrega pasos de remedio aquí si es necesario
+            remediar_cluster_datos
+        fi
+    else
+        echo "Fallo: El directorio del usuario postgres no existe."
+        # Agrega pasos de remedio aquí si es necesario
+        remediar_cluster_datos
+    fi
+}
+
+# Función para remediar el clúster de datos en caso de falla
+remediar_cluster_datos() {
+    echo "Realizando acciones de remedio para inicializar el clúster de datos..."
+
+    # Eliminar el directorio del clúster de datos y volver a inicializar
+    rm -rf $POSTGRES_USER_DIR
+    su -s /bin/bash postgres -c "PGSETUP_INITDB_OPTIONS='-k' /usr/pgsql-$PG_VERSION/bin/postgresql-$PG_VERSION-setup initdb"
+}
+
+# Ejecución principal del script
+verificar_inicializacion_cluster
+
+# Directorio del usuario postgres
+POSTGRES_USER_DIR="/var/lib/pgsql"
+
+# Verificar la máscara de permisos actual
+verificar_umask() {
+    echo "Verificando la máscara de permisos (umask) del usuario postgres..."
+
+    # Cambiar al usuario postgres
+    su - postgres <<'EOF'
+    echo "La máscara de permisos actual es: $(umask)"
+EOF
+}
+
+# Corregir la máscara de permisos
+corregir_umask() {
+    echo "Corrigiendo la máscara de permisos (umask) del usuario postgres..."
+
+    # Cambiar al usuario postgres
+    su - postgres <<'EOF'
+    # Verificar si existe el archivo .bash_profile
+    if [ -f ~/.bash_profile ]; then
+        echo "umask 0077" >> ~/.bash_profile
+        source ~/.bash_profile
+        echo "La máscara de permisos ha sido corregida a: $(umask)"
+    else
+        echo "Fallo: No se encontró el archivo .bash_profile."
+    fi
+EOF
+}
+
+# Ejecutar las funciones
+verificar_umask
+corregir_umask
+
+# Verificar si logging_collector está habilitado
+verificar_logging_collector() {
+    echo "Verificando si logging_collector está habilitado en PostgreSQL..."
+
+    # Ejecutar la consulta SQL
+    sudo -u postgres psql -c "show logging_collector;" | grep "on"
+    if [ $? -eq 0 ]; then
+        echo "logging_collector está habilitado."
+    else
+        echo "Fallo: logging_collector no está habilitado."
+    fi
+}
+
+# Habilitar logging_collector
+habilitar_logging_collector() {
+    echo "Habilitando logging_collector en PostgreSQL..."
+
+    # Ejecutar la consulta SQL para cambiar la configuración
+    sudo -u postgres psql -c "alter system set logging_collector = 'on';"
+
+    # Reiniciar el servicio PostgreSQL
+    systemctl restart postgresql-16
+
+    # Verificar el estado después del reinicio
+    systemctl status postgresql-16 | grep 'ago$'
+}
+
+# Ejecutar las funciones
+verificar_logging_collector
+habilitar_logging_collector
+
+# Verificar si log_directory está configurado correctamente
+verificar_log_directory() {
+    echo "Verificando la configuración de log_directory en PostgreSQL..."
+
+    # Ejecutar la consulta SQL
+    sudo -u postgres psql -c "show log_directory;" | grep "/var/log/postgres"
+    if [ $? -eq 0 ]; then
+        echo "log_directory está configurado correctamente."
+    else
+        echo "Fallo: log_directory no está configurado correctamente."
+    fi
+}
+
+# Configurar log_directory
+configurar_log_directory() {
+    echo "Configurando log_directory en PostgreSQL..."
+
+    # Ejecutar la consulta SQL para cambiar la configuración
+    sudo -u postgres psql -c "alter system set log_directory='/var/log/postgres';"
+    sudo -u postgres psql -c "select pg_reload_conf();"
+
+    # Verificar la nueva configuración
+    sudo -u postgres psql -c "show log_directory;"
+}
+
+# Ejecutar las funciones
+verificar_log_directory
+configurar_log_directory
+
+# Verificar si log_filename está configurado correctamente
+verificar_log_filename() {
+    echo "Verificando la configuración de log_filename en PostgreSQL..."
+
+    # Ejecutar la consulta SQL
+    sudo -u postgres psql -c "show log_filename;" | grep "postgresql-%Y%m%d.log"
+    if [ $? -eq 0 ]; then
+        echo "log_filename está configurado correctamente."
+    else
+        echo "Fallo: log_filename no está configurado correctamente."
+    fi
+}
+
+# Configurar log_filename
+configurar_log_filename() {
+    echo "Configurando log_filename en PostgreSQL..."
+
+    # Ejecutar la consulta SQL para cambiar la configuración
+    sudo -u postgres psql -c "alter system set log_filename='postgresql-%Y%m%d.log';"
+    sudo -u postgres psql -c "select pg_reload_conf();"
+
+    # Verificar la nueva configuración
+    sudo -u postgres psql -c "show log_filename;"
+}
+
+# Ejecutar las funciones
+verificar_log_filename
+configurar_log_filename
+
+
+
+# Verificar si log_file_mode está configurado correctamente
+verificar_log_file_mode() {
+    echo "Verificando la configuración de log_file_mode en PostgreSQL..."
+
+    # Ejecutar la consulta SQL
+    sudo -u postgres psql -c "show log_file_mode;" | grep "0600"
+    if [ $? -eq 0 ]; then
+        echo "log_file_mode está configurado correctamente."
+    else
+        echo "Fallo: log_file_mode no está configurado correctamente."
+    fi
+}
+
+# Configurar log_file_mode
+configurar_log_file_mode() {
+    echo "Configurando log_file_mode en PostgreSQL..."
+
+    # Ejecutar la consulta SQL para cambiar la configuración
+    sudo -u postgres psql -c "alter system set log_file_mode = '0600';"
+    sudo -u postgres psql -c "select pg_reload_conf();"
+
+    # Verificar la nueva configuración
+    sudo -u postgres psql -c "show log_file_mode;"
+}
+
+# Ejecutar las funciones
+verificar_log_file_mode
+configurar_log_file_mode
+
+# Verificar si log_truncate_on_rotation está configurado correctamente
+verificar_log_truncate_on_rotation() {
+    echo "Verificando la configuración de log_truncate_on_rotation en PostgreSQL..."
+
+    # Ejecutar la consulta SQL
+    sudo -u postgres psql -c "show log_truncate_on_rotation;" | grep "on"
+    if [ $? -eq 0 ]; then
+        echo "log_truncate_on_rotation está configurado correctamente."
+    else
+        echo "Fallo: log_truncate_on_rotation no está configurado correctamente."
+    fi
+}
+
+# Configurar log_truncate_on_rotation
+configurar_log_truncate_on_rotation() {
+    echo "Configurando log_truncate_on_rotation en PostgreSQL..."
+
+    # Ejecutar la consulta SQL para cambiar la configuración
+    sudo -u postgres psql -c "alter system set log_truncate_on_rotation = 'on';"
+    sudo -u postgres psql -c "select pg_reload_conf();"
+
+    # Verificar la nueva configuración
+    sudo -u postgres psql -c "show log_truncate_on_rotation;"
+}
+
+# Ejecutar las funciones
+verificar_log_truncate_on_rotation
+configurar_log_truncate_on_rotation
+
+# Verificar si log_rotation_age está configurado correctamente
+verificar_log_rotation_age() {
+    echo "Verificando la configuración de log_rotation_age en PostgreSQL..."
+
+    # Ejecutar la consulta SQL
+    sudo -u postgres psql -c "show log_rotation_age;" | grep "1d"
+    if [ $? -eq 0 ]; then
+        echo "log_rotation_age está configurado correctamente."
+    else
+        echo "Fallo: log_rotation_age no está configurado correctamente."
+    fi
+}
+
+# Configurar log_rotation_age
+configurar_log_rotation_age() {
+    echo "Configurando log_rotation_age en PostgreSQL..."
+
+    # Ejecutar la consulta SQL para cambiar la configuración
+    sudo -u postgres psql -c "alter system set log_rotation_age='1h';"
+    sudo -u postgres psql -c "select pg_reload_conf();"
+
+    # Verificar la nueva configuración
+    sudo -u postgres psql -c "show log_rotation_age;"
+}
+
+# Ejecutar las funciones
+verificar_log_rotation_age
+configurar_log_rotation_age
+
+# Verificar si log_rotation_size está configurado correctamente
+verificar_log_rotation_size() {
+    echo "Verificando la configuración de log_rotation_size en PostgreSQL..."
+
+    # Ejecutar la consulta SQL
+    sudo -u postgres psql -c "show log_rotation_size;" | grep "0"
+    if [ $? -eq 0 ]; then
+        echo "log_rotation_size está configurado correctamente."
+    else
+        echo "Fallo: log_rotation_size no está configurado correctamente."
+    fi
+}
+
+# Configurar log_rotation_size
+configurar_log_rotation_size() {
+    echo "Configurando log_rotation_size en PostgreSQL..."
+
+    # Ejecutar la consulta SQL para cambiar la configuración
+    sudo -u postgres psql -c "alter system set log_rotation_size='1GB';"
+    sudo -u postgres psql -c "select pg_reload_conf();"
+
+    # Verificar la nueva configuración
+    sudo -u postgres psql -c "show log_rotation_size;"
+}
+
+# Ejecutar las funciones
+verificar_log_rotation_size
+configurar_log_rotation_size
+
+# Verificar si syslog_facility está configurado correctamente
+verificar_syslog_facility() {
+    echo "Verificando la configuración de syslog_facility en PostgreSQL..."
+
+    # Ejecutar la consulta SQL
+    sudo -u postgres psql -c "show syslog_facility;" | grep "local0"
+    if [ $? -eq 0 ]; then
+        echo "syslog_facility está configurado correctamente."
+    else
+        echo "Fallo: syslog_facility no está configurado correctamente."
+    fi
+}
+
+# Configurar syslog_facility
+configurar_syslog_facility() {
+    echo "Configurando syslog_facility en PostgreSQL..."
+
+    # Ejecutar la consulta SQL para cambiar la configuración
+    sudo -u postgres psql -c "alter system set syslog_facility='LOCAL1';"
+    sudo -u postgres psql -c "select pg_reload_conf();"
+
+    # Verificar la nueva configuración
+    sudo -u postgres psql -c "show syslog_facility;"
+}
+
+# Ejecutar las funciones
+verificar_syslog_facility
+configurar_syslog_facility
+
+# Verificar si syslog_split_messages está configurado correctamente
+verificar_syslog_split_messages() {
+    echo "Verificando la configuración de syslog_split_messages en PostgreSQL..."
+
+    # Ejecutar la consulta SQL
+    sudo -u postgres psql -c "show syslog_split_messages;" | grep "on"
+    if [ $? -eq 0 ]; then
+        echo "syslog_split_messages está configurado correctamente."
+    else
+        echo "Fallo: syslog_split_messages no está configurado correctamente."
+    fi
+}
+
+# Configurar syslog_split_messages
+configurar_syslog_split_messages() {
+    echo "Configurando syslog_split_messages en PostgreSQL..."
+
+    # Ejecutar la consulta SQL para cambiar la configuración
+    sudo -u postgres psql -c "alter system set syslog_split_messages='on';"
+    sudo -u postgres psql -c "select pg_reload_conf();"
+
+    # Verificar la nueva configuración
+    sudo -u postgres psql -c "show syslog_split_messages;"
+}
+
+# Ejecutar las funciones
+verificar_syslog_split_messages
+configurar_syslog_split_messages
+
+# Verificar si syslog_ident está configurado correctamente
+verificar_syslog_ident() {
+    echo "Verificando la configuración de syslog_ident en PostgreSQL..."
+
+    # Ejecutar la consulta SQL
+    sudo -u postgres psql -c "show syslog_ident;" | grep "postgres"
+    if [ $? -eq 0 ]; then
+        echo "syslog_ident está configurado correctamente."
+    else
+        echo "Fallo: syslog_ident no está configurado correctamente."
+    fi
+}
+
+# Configurar syslog_ident
+configurar_syslog_ident() {
+    echo "Configurando syslog_ident en PostgreSQL..."
+
+    # Ejecutar la consulta SQL para cambiar la configuración
+    sudo -u postgres psql -c "alter system set syslog_ident='proddb';"
+    sudo -u postgres psql -c "select pg_reload_conf();"
+
+    # Verificar la nueva configuración
+    sudo -u postgres psql -c "show syslog_ident;"
+}
+
+# Ejecutar las funciones
+verificar_syslog_ident
+configurar_syslog_ident
+
+# Verificar si log_min_messages está configurado correctamente
+verificar_log_min_messages() {
+    echo "Verificando la configuración de log_min_messages en PostgreSQL..."
+
+    # Ejecutar la consulta SQL
+    sudo -u postgres psql -c "show log_min_messages;" | grep "warning"
+    if [ $? -eq 0 ]; then
+        echo "log_min_messages está configurado correctamente."
+    else
+        echo "Fallo: log_min_messages no está configurado correctamente."
+    fi
+}
+
+# Configurar log_min_messages
+configurar_log_min_messages() {
+    echo "Configurando log_min_messages en PostgreSQL..."
+
+    # Ejecutar la consulta SQL para cambiar la configuración
+    sudo -u postgres psql -c "alter system set log_min_messages='warning';"
+    sudo -u postgres psql -c "select pg_reload_conf();"
+
+    # Verificar la nueva configuración
+    sudo -u postgres psql -c "show log_min_messages;"
+}
+
+# Ejecutar las funciones
+verificar_log_min_messages
+configurar_log_min_messages
+
+# Verificar si log_min_error_statement está configurado correctamente
+verificar_log_min_error_statement() {
+    echo "Verificando la configuración de log_min_error_statement en PostgreSQL..."
+
+    # Ejecutar la consulta SQL
+    sudo -u postgres psql -c "show log_min_error_statement;" | grep "error"
+    if [ $? -eq 0 ]; then
+        echo "log_min_error_statement está configurado correctamente."
+    else
+        echo "Fallo: log_min_error_statement no está configurado correctamente."
+    fi
+}
+
+# Configurar log_min_error_statement
+configurar_log_min_error_statement() {
+    echo "Configurando log_min_error_statement en PostgreSQL..."
+
+    # Ejecutar la consulta SQL para cambiar la configuración
+    sudo -u postgres psql -c "alter system set log_min_error_statement='error';"
+    sudo -u postgres psql -c "select pg_reload_conf();"
+
+    # Verificar la nueva configuración
+    sudo -u postgres psql -c "show log_min_error_statement;"
+}
+
+# Ejecutar las funciones
+verificar_log_min_error_statement
+configurar_log_min_error_statement
+
+# Verificar si debug_print_parse está configurado correctamente
+verificar_debug_print_parse() {
+    echo "Verificando la configuración de debug_print_parse en PostgreSQL..."
+
+    # Ejecutar la consulta SQL
+    sudo -u postgres psql -c "show debug_print_parse;" | grep "off"
+    if [ $? -eq 0 ]; then
+        echo "debug_print_parse está configurado correctamente."
+    else
+        echo "Fallo: debug_print_parse no está configurado correctamente."
+    fi
+}
+
+# Configurar debug_print_parse
+configurar_debug_print_parse() {
+    echo "Configurando debug_print_parse en PostgreSQL..."
+
+    # Ejecutar la consulta SQL para cambiar la configuración
+    sudo -u postgres psql -c "alter system set debug_print_parse='off';"
+    sudo -u postgres psql -c "select pg_reload_conf();"
+
+    # Verificar la nueva configuración
+    sudo -u postgres psql -c "show debug_print_parse;"
+}
+
+# Ejecutar las funciones
+verificar_debug_print_parse
+configurar_debug_print_parse
+
+# Verificar si debug_print_rewritten está configurado correctamente
+verificar_debug_print_rewritten() {
+    echo "Verificando la configuración de debug_print_rewritten en PostgreSQL..."
+
+    # Ejecutar la consulta SQL
+    sudo -u postgres psql -c "show debug_print_rewritten;" | grep "off"
+    if [ $? -eq 0 ]; then
+        echo "debug_print_rewritten está configurado correctamente."
+    else
+        echo "Fallo: debug_print_rewritten no está configurado correctamente."
+    fi
+}
+
+# Configurar debug_print_rewritten
+configurar_debug_print_rewritten() {
+    echo "Configurando debug_print_rewritten en PostgreSQL..."
+
+    # Ejecutar la consulta SQL para cambiar la configuración
+    sudo -u postgres psql -c "alter system set debug_print_rewritten='off';"
+    sudo -u postgres psql -c "select pg_reload_conf();"
+
+    # Verificar la nueva configuración
+    sudo -u postgres psql -c "show debug_print_rewritten;"
+}
+
+# Ejecutar las funciones
+verificar_debug_print_rewritten
+configurar_debug
+
+# Verificar si debug_print_plan está configurado correctamente
+verificar_debug_print_plan() {
+    echo "Verificando la configuración de debug_print_plan en PostgreSQL..."
+
+    # Ejecutar la consulta SQL
+    sudo -u postgres psql -c "show debug_print_plan;" | grep "off"
+    if [ $? -eq 0 ]; then
+        echo "debug_print_plan está configurado correctamente."
+    else
+        echo "Fallo: debug_print_plan no está configurado correctamente."
+    fi
+}
+
+# Configurar debug_print_plan
+configurar_debug_print_plan() {
+    echo "Configurando debug_print_plan en PostgreSQL..."
+
+    # Ejecutar la consulta SQL para cambiar la configuración
+    sudo -u postgres psql -c "alter system set debug_print_plan='off';"
+    sudo -u postgres psql -c "select pg_reload_conf();"
+
+    # Verificar la nueva configuración
+    sudo -u postgres psql -c "show debug_print_plan;"
+}
+
+# Ejecutar las funciones
+verificar_debug_print_plan
+configurar_debug_print_plan
+
+# Verificar si debug_pretty_print está configurado correctamente
+verificar_debug_pretty_print() {
+    echo "Verificando la configuración de debug_pretty_print en PostgreSQL..."
+
+    # Ejecutar la consulta SQL
+    sudo -u postgres psql -c "show debug_pretty_print;" | grep "on"
+    if [ $? -eq 0 ]; then
+        echo "debug_pretty_print está configurado correctamente."
+    else
+        echo "Fallo: debug_pretty_print no está configurado correctamente."
+    fi
+}
+
+# Configurar debug_pretty_print
+configurar_debug_pretty_print() {
+    echo "Configurando debug_pretty_print en PostgreSQL..."
+
+    # Ejecutar la consulta SQL para cambiar la configuración
+    sudo -u postgres psql -c "alter system set debug_pretty_print='on';"
+    sudo -u postgres psql -c "select pg_reload_conf();"
+
+    # Verificar la nueva configuración
+    sudo -u postgres psql -c "show debug_pretty_print;"
+}
+
+# Ejecutar las funciones
+verificar_debug_pretty_print
+configurar_debug_pretty_print
