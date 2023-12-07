@@ -1,0 +1,60 @@
+import code
+import contextlib
+import sys
+import os
+
+class RedirectedOutput:
+    def __enter__(self):
+        self.stdout = sys.stdout
+        self.stderr = sys.stderr
+        sys.stdout = sys.stderr = self.buffer = []
+
+    def __exit__(self, *args):
+        sys.stdout = self.stdout
+        sys.stderr = self.stderr
+        self.buffer = []
+
+def safe_exec(code, locals_dict):
+    try:
+        with RedirectedOutput():
+            exec(code, {}, locals_dict)
+    except Exception as e:
+        return f"Error: {e}"
+
+def custom_compile(source):
+    try:
+        code_obj = compile(source, "<string>", "exec")
+        return code_obj
+    except SyntaxError as e:
+        return f"SyntaxError: {e}"
+
+class CustomJail(code.InteractiveConsole):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def run_code(self, code):
+        compiled_code = custom_compile(code)
+        if isinstance(compiled_code, str):
+            print(compiled_code)
+        else:
+            result = safe_exec(compiled_code, self.locals)
+            if result:
+                print(result)
+
+    def interact(self):
+        sys.ps1 = "Jail >>> "
+        sys.ps2 = "       ... "
+        super().interact()
+
+def main():
+    # Crear una instancia del "jail"
+    custom_jail = CustomJail()
+
+    # Mensaje de bienvenida
+    print("Bienvenido al jail. Ingresa 'exit()' para salir.")
+
+    # Entrar en el "jail"
+    custom_jail.interact()
+
+if __name__ == "__main__":
+    main()
